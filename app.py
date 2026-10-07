@@ -8,15 +8,67 @@ st.set_page_config(page_title="DiaFlowAssist", layout="wide")
 
 
 def classify_risk(score: float) -> str:
-    if score >= 75:
+    if score >= 66:
         return "High"
-    if score >= 45:
-        return "Mod"
+    if score >= 31:
+        return "Moderate"
     return "Low"
 
 
 def allocated_slot_minutes(triage_level: str) -> int:
-    return {"Low": 15, "Mod": 25, "High": 40}[triage_level]
+    return {"Low": 10, "Moderate": 15, "High": 25}[triage_level]
+
+
+def calculate_risk_score(
+    glycemic_control: str,
+    regimen: str,
+    preventive_checks: list[str],
+    acute_symptoms: bool,
+) -> int:
+    glycemic_points = {
+        "Controlled (<7.5%)": 0,
+        "Suboptimal (7.5-9%)": 15,
+        "Uncontrolled (>9% or hypos)": 30,
+    }[glycemic_control]
+    regimen_points = {
+        "Lifestyle/Oral": 0,
+        "Multi-oral": 10,
+        "Insulin": 25,
+    }[regimen]
+    return (
+        glycemic_points
+        + regimen_points
+        + (15 if preventive_checks else 0)
+        + (15 if acute_symptoms else 0)
+    )
+
+
+def build_complexity_drivers(
+    glycemic_control: str,
+    regimen: str,
+    preventive_checks: list[str],
+    acute_symptoms: bool,
+) -> list[str]:
+    drivers = []
+    if glycemic_control == "Suboptimal (7.5-9%)":
+        drivers.append("Suboptimal glycemic control (HbA1c 7.5-9%)")
+    elif glycemic_control == "Uncontrolled (>9% or hypos)":
+        drivers.append("Uncontrolled HbA1c (>9%) or hypoglycemia")
+    if regimen == "Multi-oral":
+        drivers.append("Multi-oral medication regimen")
+    elif regimen == "Insulin":
+        drivers.append("Insulin regimen")
+    if preventive_checks and acute_symptoms:
+        drivers.append("Overdue preventive checks and acute symptoms")
+    elif preventive_checks:
+        drivers.append("Overdue annual preventive checks")
+    elif acute_symptoms:
+        drivers.append("Acute complaint or symptoms")
+    return drivers or ["No elevated-complexity factors reported"]
+
+
+def status_for_triage(triage_level: str, requested_status: str) -> str:
+    return "Urgent" if triage_level == "High" else requested_status
 
 
 def format_duration(seconds: float) -> str:
@@ -32,55 +84,67 @@ def load_demo_queue() -> pd.DataFrame:
                 "id": "P-101",
                 "patient": "Aisha Khan",
                 "age": 42,
-                "risk_score": 82,
-                "status": "Waiting",
+                "risk_score": 85,
+                "status": "Urgent",
                 "wait_minutes": 15,
+                "glycemic_control": "Uncontrolled (>9% or hypos)",
+                "regimen": "Insulin",
+                "acute_symptoms": True,
                 "drivers": [
-                    "Uncontrolled HbA1c (9.2%)",
-                    "Basal-bolus insulin regimen",
-                    "Recent hypoglycemia symptoms",
+                    "Uncontrolled HbA1c (>9%) or hypoglycemia",
+                    "Insulin regimen",
+                    "Overdue annual preventive checks",
+                    "Acute complaint or symptoms",
                 ],
-                "preventive_checks": ["uACR Overdue", "Foot Exam Due"],
+                "preventive_checks": ["uACR", "Foot exam"],
             },
             {
                 "id": "P-102",
                 "patient": "Rahul Mehta",
                 "age": 36,
-                "risk_score": 58,
+                "risk_score": 40,
                 "status": "In triage",
                 "wait_minutes": 9,
+                "glycemic_control": "Suboptimal (7.5-9%)",
+                "regimen": "Multi-oral",
+                "acute_symptoms": False,
                 "drivers": [
-                    "HbA1c above target (8.1%)",
-                    "Insulin titration needs review",
+                    "Suboptimal glycemic control (HbA1c 7.5-9%)",
+                    "Multi-oral medication regimen",
+                    "Overdue annual preventive checks",
                 ],
-                "preventive_checks": ["uACR Overdue"],
+                "preventive_checks": ["uACR"],
             },
             {
                 "id": "P-103",
                 "patient": "Nina Smith",
                 "age": 51,
-                "risk_score": 27,
+                "risk_score": 0,
                 "status": "Checked-in",
                 "wait_minutes": 5,
-                "drivers": [
-                    "Stable glucose control reported",
-                    "No recent hypoglycemia symptoms",
-                ],
+                "glycemic_control": "Controlled (<7.5%)",
+                "regimen": "Lifestyle/Oral",
+                "acute_symptoms": False,
+                "drivers": ["No elevated-complexity factors reported"],
                 "preventive_checks": [],
             },
             {
                 "id": "P-104",
                 "patient": "Daniel Lee",
                 "age": 67,
-                "risk_score": 91,
+                "risk_score": 85,
                 "status": "Urgent",
                 "wait_minutes": 3,
+                "glycemic_control": "Uncontrolled (>9% or hypos)",
+                "regimen": "Insulin",
+                "acute_symptoms": True,
                 "drivers": [
-                    "Very high triage score (91/100)",
-                    "Complex medication regimen",
-                    "Recent glucose swings reported",
+                    "Uncontrolled HbA1c (>9%) or hypoglycemia",
+                    "Insulin regimen",
+                    "Overdue annual preventive checks",
+                    "Acute complaint or symptoms",
                 ],
-                "preventive_checks": ["uACR Overdue", "Foot Exam Due"],
+                "preventive_checks": ["uACR", "Eye exam"],
             },
         ]
     )
@@ -153,9 +217,24 @@ with st.sidebar:
     with st.form("patient_form", clear_on_submit=True):
         patient_name = st.text_input("Patient name")
         patient_age = st.number_input("Age", min_value=0, max_value=120, value=30)
-        risk_score = st.slider("Risk score", 0, 100, 50)
+        glycemic_control = st.selectbox(
+            "Glycemic control",
+            [
+                "Controlled (<7.5%)",
+                "Suboptimal (7.5-9%)",
+                "Uncontrolled (>9% or hypos)",
+            ],
+        )
+        regimen = st.selectbox(
+            "Regimen", ["Lifestyle/Oral", "Multi-oral", "Insulin"]
+        )
+        preventive_checks = st.multiselect(
+            "Overdue preventive checks",
+            ["uACR", "Foot exam", "Eye exam"],
+        )
+        acute_symptoms = st.checkbox("Acute complaint / symptoms")
         status = st.selectbox(
-            "Current status", ["Waiting", "Checked-in", "In triage", "Urgent"]
+            "Queue status", ["Waiting", "Checked-in", "In triage"]
         )
         wait_minutes = st.number_input(
             "Wait time (minutes)", min_value=0, max_value=300, value=0
@@ -163,18 +242,24 @@ with st.sidebar:
         submitted = st.form_submit_button("Add patient")
 
         if submitted and patient_name.strip():
+            risk_score = calculate_risk_score(
+                glycemic_control, regimen, preventive_checks, acute_symptoms
+            )
+            triage_level = classify_risk(risk_score)
             new_patient = {
-                "id": f"P-{len(st.session_state.queue) + 101}",
+                "id": f"P-{int(st.session_state.queue['id'].str[2:].astype(int).max()) + 1}",
                 "patient": patient_name.strip(),
                 "age": int(patient_age),
-                "risk_score": int(risk_score),
-                "status": status,
+                "risk_score": risk_score,
+                "status": status_for_triage(triage_level, status),
                 "wait_minutes": int(wait_minutes),
-                "drivers": [
-                    "Risk score entered at triage",
-                    "Clinical details not yet recorded",
-                ],
-                "preventive_checks": None,
+                "glycemic_control": glycemic_control,
+                "regimen": regimen,
+                "acute_symptoms": acute_symptoms,
+                "drivers": build_complexity_drivers(
+                    glycemic_control, regimen, preventive_checks, acute_symptoms
+                ),
+                "preventive_checks": preventive_checks,
             }
             st.session_state.queue = pd.concat(
                 [st.session_state.queue, pd.DataFrame([new_patient])],
@@ -191,17 +276,6 @@ priority_queue = queue_df.sort_values(
 patient_options = priority_queue["id"].tolist()
 patient_by_id = queue_df.set_index("id")
 
-selected_patient_id = st.selectbox(
-    "Patient summary",
-    patient_options,
-    format_func=lambda patient_id: (
-        f"{patient_by_id.loc[patient_id, 'patient']} · "
-        f"{patient_by_id.loc[patient_id, 'triage_level']} priority"
-    ),
-)
-patient = patient_by_id.loc[selected_patient_id]
-slot_minutes = allocated_slot_minutes(patient["triage_level"])
-
 metric_cols = st.columns(4)
 metric_cols[0].metric("Patients in queue", len(queue_df))
 metric_cols[1].metric(
@@ -216,6 +290,32 @@ metric_cols[3].metric(
     "Urgent cases",
     int((queue_df["status"] == "Urgent").sum()),
 )
+
+st.subheader("Queue overview")
+display_df = priority_queue[
+    [
+        "id",
+        "patient",
+        "age",
+        "risk_score",
+        "triage_level",
+        "status",
+        "wait_minutes",
+    ]
+].copy()
+st.dataframe(display_df, width="stretch", hide_index=True)
+
+st.subheader("Doctor's summary")
+selected_patient_id = st.selectbox(
+    "Select a patient",
+    patient_options,
+    format_func=lambda patient_id: (
+        f"{patient_by_id.loc[patient_id, 'patient']} · "
+        f"{patient_by_id.loc[patient_id, 'triage_level']} priority"
+    ),
+)
+patient = patient_by_id.loc[selected_patient_id]
+slot_minutes = allocated_slot_minutes(patient["triage_level"])
 
 with st.container(border=True):
     st.subheader("10-second clinical summary")
@@ -239,13 +339,11 @@ with st.container(border=True):
 
     st.markdown("**Preventive checks**")
     preventive_checks = patient["preventive_checks"]
-    if preventive_checks is None:
-        st.info("Annual check status not recorded.")
-    elif preventive_checks:
+    if preventive_checks:
         badges = "".join(
             f"<span style='display:inline-block;background:#991b1b;color:#fff;"
             f"font-weight:700;padding:8px 12px;border-radius:999px;margin:0 8px 8px 0'>"
-            f"{check}</span>"
+            f"⚠️ {check} Due</span>"
             for check in preventive_checks
         )
         st.markdown(badges, unsafe_allow_html=True)
@@ -254,17 +352,3 @@ with st.container(border=True):
 
     st.markdown("**Consultation timer**")
     consultation_controls(selected_patient_id, slot_minutes)
-
-with st.expander("Queue overview"):
-    display_df = priority_queue[
-        [
-            "id",
-            "patient",
-            "age",
-            "risk_score",
-            "triage_level",
-            "status",
-            "wait_minutes",
-        ]
-    ].copy()
-    st.dataframe(display_df, width="stretch", hide_index=True)
