@@ -1,3 +1,5 @@
 patient_id,patient,acute_complaint,emergency_symptoms,emergency_reasons,cbg_mg_dl,systolic_bp_mmhg,respiratory_rate_per_min,recorded_at
 P-112,Rohan singh Tripathi 32,True,"[""Severe hypo (CBG < 70 mg/dL)"", ""Altered sensorium""]","[""Severe hypo (CBG < 70 mg/dL)"", ""Altered sensorium"", ""Hypotension (SBP < 90 mmHg)""]",40,80,12,2026-10-21T16:43:53.855268
 P-113,Raman lal,True,"[""Chest pain"", ""Severe hypo (CBG < 70 mg/dL)"", ""Altered sensorium"", ""Tachypnea (RR > 20/min)""]","[""Chest pain"", ""Severe hypo (CBG < 70 mg/dL)"", ""Altered sensorium"", ""Tachypnea (RR > 20/min)""]",100,120,12,2026-10-21T17:04:28.011989
+P-114,ritesh,True,"[""Severe hypo (CBG < 70 mg/dL)"", ""Altered sensorium"", ""Tachypnea (RR > 20/min)""]","[""Severe hypo (CBG < 70 mg/dL)"", ""Altered sensorium"", ""Tachypnea (RR > 20/min)""]",40,90,20,2026-10-21T17:38:11.110250
+P-115,ritesh singh,True,"[""Severe hypo (CBG < 70 mg/dL)"", ""Tachypnea (RR > 20/min)"", ""Hypotension (SBP < 90 mmHg)"", ""Chest pain""]","[""Severe hypo (CBG < 70 mg/dL)"", ""Tachypnea (RR > 20/min)"", ""Hypotension (SBP < 90 mmHg)"", ""Chest pain""]",69,89,16,2026-10-21T17:39:02.128251

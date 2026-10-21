@@ -142,63 +142,64 @@ def render_patient_intake(
             "Wait time (minutes)", min_value=0, max_value=300, key="wait_minutes"
         )
 
-        alert_reasons = (
-            emergency_trigger_reasons(
-                st.session_state.emergency_symptoms,
-                st.session_state.cbg,
-                st.session_state.systolic_bp,
-                st.session_state.respiratory_rate,
-            )
-            if st.session_state.acute_complaint
-            else []
+    alert_reasons = (
+        emergency_trigger_reasons(
+            st.session_state.emergency_symptoms,
+            st.session_state.cbg,
+            st.session_state.systolic_bp,
+            st.session_state.respiratory_rate,
         )
-        is_emergency = bool(alert_reasons)
-        emergency_details_complete = bool(
-            st.session_state.patient_name.strip()
-        ) and all(
-            value is not None
-            for value in (
-                st.session_state.cbg,
-                st.session_state.systolic_bp,
-                st.session_state.respiratory_rate,
-            )
+        if st.session_state.acute_complaint
+        else []
+    )
+    is_emergency = bool(alert_reasons)
+    emergency_details_complete = bool(
+        st.session_state.patient_name.strip()
+    ) and all(
+        value is not None
+        for value in (
+            st.session_state.cbg,
+            st.session_state.systolic_bp,
+            st.session_state.respiratory_rate,
         )
-        acute_kidney_details_complete = (
-            not st.session_state.acute_complaint
-            or (
-                st.session_state.egfr is not None
-                and st.session_state.months_since_egfr_check is not None
-            )
+    )
+    acute_kidney_details_complete = (
+        not st.session_state.acute_complaint
+        or (
+            st.session_state.egfr is not None
+            and st.session_state.months_since_egfr_check is not None
         )
-        if not st.session_state.acute_complaint:
-            st.session_state.emergency_dialog_dismissed = False
-        if (
-            is_emergency
-            and emergency_details_complete
-            and acute_kidney_details_complete
-            and not st.session_state.emergency_dialog_dismissed
-        ):
+    )
+    if not st.session_state.acute_complaint:
+        st.session_state.emergency_dialog_dismissed = False
+    if (
+        is_emergency
+        and emergency_details_complete
+        and acute_kidney_details_complete
+        and not st.session_state.emergency_dialog_dismissed
+    ):
+        with st.sidebar:
             st.error(
                 "**EMERGENCY CRITERIA DETECTED — ordinary queue assignment is disabled.**"
             )
-            emergency_alert_dialog(
-                alert_reasons, accept_emergency_callback, bypass_emergency_callback
-            )
-        elif is_emergency:
+    elif is_emergency:
+        with st.sidebar:
             st.warning(
                 "Emergency criteria detected. Enter the patient name, select CBG, SBP, "
                 "RR, eGFR, and the last kidney check to show the doctor alert. "
                 "Ordinary queue assignment is disabled."
             )
-        elif (
-            st.session_state.acute_complaint
-            and not acute_kidney_details_complete
-        ):
+    elif (
+        st.session_state.acute_complaint
+        and not acute_kidney_details_complete
+    ):
+        with st.sidebar:
             st.warning(
                 "For acute complaints, select eGFR and the last kidney check before "
                 "adding the patient to the queue."
             )
 
+    with st.sidebar:
         st.button(
             "Add patient to queue",
             type="primary",
@@ -210,4 +211,14 @@ def render_patient_intake(
             ),
             on_click=add_patient_callback,
             width="stretch",
+        )
+
+    if (
+        is_emergency
+        and emergency_details_complete
+        and acute_kidney_details_complete
+        and not st.session_state.emergency_dialog_dismissed
+    ):
+        emergency_alert_dialog(
+            alert_reasons, accept_emergency_callback, bypass_emergency_callback
         )
