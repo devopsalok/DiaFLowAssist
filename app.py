@@ -1,9 +1,12 @@
 import json
-import time
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+
+from ui.doctor import render_doctor_overview
+from ui.patient import render_patient_intake
+from ui.queue import render_queue_overview
 
 
 st.set_page_config(page_title="DiaFlowAssist", layout="wide")
@@ -20,10 +23,6 @@ def classify_risk(score: float) -> str:
     if score >= 31:
         return "Moderate"
     return "Low"
-
-
-def allocated_slot_minutes(triage_level: str) -> int:
-    return {"Low": 10, "Moderate": 15, "High": 25}[triage_level]
 
 
 def calculate_risk_score(
@@ -76,30 +75,6 @@ def build_complexity_drivers(
 
 def status_for_triage(triage_level: str, requested_status: str) -> str:
     return "Urgent" if triage_level == "High" else requested_status
-
-
-def format_duration(seconds: float) -> str:
-    total_seconds = max(0, int(seconds))
-    return f"{total_seconds // 60:02d}:{total_seconds % 60:02d}"
-
-
-def format_kidney_summary(
-    egfr: int | float | None, months_since_check: int | float | None
-) -> tuple[str, bool]:
-    details = []
-    if pd.notna(egfr):
-        details.append(f"eGFR {int(egfr)} mL/min")
-    else:
-        details.append("eGFR not recorded")
-
-    if pd.notna(months_since_check):
-        details.append(f"Last checked: {int(months_since_check)} mo ago")
-    else:
-        details.append("Last checked: not recorded")
-
-    overdue = pd.notna(months_since_check) and months_since_check > 12
-    status = " [OVERDUE]" if overdue else ""
-    return f"Kidney: {' | '.join(details)}{status}", bool(overdue)
 
 
 def emergency_trigger_reasons(
@@ -342,51 +317,6 @@ def update_selected_patient_after_removal(
         st.session_state.selected_patient_id = next_patient_id
 
 
-@st.dialog("Emergency alert", width="large")
-def emergency_alert_dialog(reasons: list[str]) -> None:
-    st.error(
-        "**EMERGENCY CRITERIA DETECTED — ordinary queue assignment is disabled.**"
-    )
-    st.markdown(f"**Patient:** {st.session_state.patient_name.strip()}")
-    st.markdown(f"**Flag(s):** {', '.join(reasons)}")
-    vital_cols = st.columns(3)
-    vital_cols[0].metric(
-        "CBG",
-        "Not recorded"
-        if st.session_state.cbg is None
-        else f"{st.session_state.cbg} mg/dL",
-    )
-    vital_cols[1].metric(
-        "SBP",
-        "Not recorded"
-        if st.session_state.systolic_bp is None
-        else f"{st.session_state.systolic_bp} mmHg",
-    )
-    vital_cols[2].metric(
-        "Respiratory rate",
-        "Not recorded"
-        if st.session_state.respiratory_rate is None
-        else f"{st.session_state.respiratory_rate} /min",
-    )
-    st.caption(
-        "This workflow flag is based on entered symptoms and vitals; it is not a diagnosis."
-    )
-    accept_col, bypass_col = st.columns(2)
-    accept_col.button(
-        "Accept — assign Emergency priority",
-        type="primary",
-        key="accept_emergency",
-        on_click=accept_emergency_patient,
-        width="stretch",
-    )
-    bypass_col.button(
-        "Bypass — add to routine queue",
-        key="bypass_emergency",
-        on_click=bypass_emergency_patient,
-        width="stretch",
-    )
-
-
 @st.cache_data
 def load_demo_queue() -> pd.DataFrame:
     return pd.DataFrame(
@@ -585,60 +515,6 @@ def load_queue_data() -> pd.DataFrame:
     return queue
 
 
-@st.fragment(run_every="1s")
-def consultation_controls(patient_id: str, slot_minutes: int) -> None:
-    consultations = st.session_state.consultations
-    consultation = consultations.get(patient_id)
-
-    if consultation is None:
-        if st.button(
-            "Start Consultation",
-            type="primary",
-            key=f"start_consultation_{patient_id}",
-            width="stretch",
-        ):
-            consultations[patient_id] = {
-                "started_at": time.time(),
-                "ended_at": None,
-            }
-            st.session_state.consultations = consultations
-            st.rerun()
-        st.caption(f"Starts a timer against the predicted {slot_minutes}-minute slot.")
-        return
-
-    ended_at = consultation["ended_at"]
-    elapsed_seconds = (ended_at or time.time()) - consultation["started_at"]
-    slot_seconds = slot_minutes * 60
-
-    if ended_at is None:
-        st.metric("Consultation duration", format_duration(elapsed_seconds))
-        st.progress(
-            min(elapsed_seconds / slot_seconds, 1.0),
-            text=f"{slot_minutes}-minute predicted slot",
-        )
-        if elapsed_seconds > slot_seconds:
-            st.warning(
-                f"Predicted slot exceeded by {format_duration(elapsed_seconds - slot_seconds)}."
-            )
-        else:
-            st.caption(
-                f"{format_duration(slot_seconds - elapsed_seconds)} remaining in the predicted slot."
-            )
-        if st.button(
-            "End Consultation",
-            key=f"end_consultation_{patient_id}",
-            width="stretch",
-        ):
-            ended_at = time.time()
-            archive_patient_after_consultation(
-                patient_id, consultation, ended_at
-            )
-            st.rerun()
-    else:
-        st.metric("Consultation duration", format_duration(elapsed_seconds))
-        st.caption("Consultation complete.")
-
-
 if "queue" not in st.session_state:
     st.session_state.queue = load_queue_data()
 if "patient_age" not in st.session_state:
@@ -666,331 +542,19 @@ if "emergency_dialog_dismissed" not in st.session_state:
 st.title("DiaFlowAssist")
 st.caption("A 10-second clinical brief for the next consultation · Demo patient data")
 
-with st.sidebar:
-    st.header("Add patient")
-    st.text_input("Patient name", key="patient_name")
-    st.number_input("Age", min_value=0, max_value=120, key="patient_age")
-    st.selectbox(
-        "Glycemic control",
-        [
-            "Controlled (<7.5%)",
-            "Suboptimal (7.5-9%)",
-            "Uncontrolled (>9% or hypos)",
-        ],
-        key="glycemic_control",
-    )
-    st.selectbox(
-        "Regimen", ["Lifestyle/Oral", "Multi-oral", "Insulin"], key="regimen"
-    )
-    st.multiselect(
-        "Overdue preventive checks",
-        ["uACR", "Foot exam", "Eye exam"],
-        key="preventive_checks",
-    )
-    st.selectbox(
-        "eGFR (mL/min)",
-        [None, 120, 90, 75, 58, 45, 30, 15],
-        format_func=lambda value: "Not recorded" if value is None else str(value),
-        key="egfr",
-    )
-    st.selectbox(
-        "Last kidney check",
-        [None, 1, 3, 6, 12, 14, 24],
-        format_func=lambda months: (
-            "Not recorded"
-            if months is None
-            else f"{months} month{'s' if months != 1 else ''} ago"
-        ),
-        key="months_since_egfr_check",
-    )
-    st.checkbox("Acute complaint / symptoms", key="acute_complaint")
-    if st.session_state.acute_complaint:
-        st.multiselect(
-            "Emergency symptoms (select all that apply)",
-            [
-                "Chest pain",
-                "Severe hypo (CBG < 70 mg/dL)",
-                "Marked hyper (CBG > 300 mg/dL)",
-                "Hypotension (SBP < 90 mmHg)",
-                "Altered sensorium",
-                "Tachypnea (RR > 20/min)",
-                "Intractable vomiting",
-            ],
-            key="emergency_symptoms",
-        )
-        st.selectbox(
-            "CBG (mg/dL)",
-            [None, 40, 60, 69, 70, 80, 100, 150, 200, 250, 300, 301, 350, 400],
-            format_func=lambda value: (
-                "Not recorded" if value is None else str(value)
-            ),
-            key="cbg",
-        )
-        st.selectbox(
-            "SBP (mmHg)",
-            [None, 60, 80, 89, 90, 100, 120, 140, 160, 180],
-            format_func=lambda value: (
-                "Not recorded" if value is None else str(value)
-            ),
-            key="systolic_bp",
-        )
-        st.selectbox(
-            "RR (breaths/min)",
-            [None, 8, 12, 16, 20, 21, 24, 30, 40],
-            format_func=lambda value: (
-                "Not recorded" if value is None else str(value)
-            ),
-            key="respiratory_rate",
-        )
-    else:
-        st.session_state.emergency_symptoms = []
-        st.session_state.cbg = None
-        st.session_state.systolic_bp = None
-        st.session_state.respiratory_rate = None
-    st.selectbox(
-        "Queue status", ["Waiting", "Checked-in", "In triage"], key="status"
-    )
-    st.number_input(
-        "Wait time (minutes)", min_value=0, max_value=300, key="wait_minutes"
-    )
-
-    alert_reasons = (
-        emergency_trigger_reasons(
-            st.session_state.emergency_symptoms,
-            st.session_state.cbg,
-            st.session_state.systolic_bp,
-            st.session_state.respiratory_rate,
-        )
-        if st.session_state.acute_complaint
-        else []
-    )
-    is_emergency = bool(alert_reasons)
-    emergency_details_complete = bool(st.session_state.patient_name.strip()) and all(
-        value is not None
-        for value in (
-            st.session_state.cbg,
-            st.session_state.systolic_bp,
-            st.session_state.respiratory_rate,
-        )
-    )
-    acute_kidney_details_complete = (
-        not st.session_state.acute_complaint
-        or (
-            st.session_state.egfr is not None
-            and st.session_state.months_since_egfr_check is not None
-        )
-    )
-    if not st.session_state.acute_complaint:
-        st.session_state.emergency_dialog_dismissed = False
-    if (
-        is_emergency
-        and emergency_details_complete
-        and acute_kidney_details_complete
-        and not st.session_state.emergency_dialog_dismissed
-    ):
-        st.error(
-            "**EMERGENCY CRITERIA DETECTED — ordinary queue assignment is disabled.**"
-        )
-        emergency_alert_dialog(alert_reasons)
-    elif is_emergency:
-        st.warning(
-            "Emergency criteria detected. Enter the patient name, select CBG, SBP, "
-            "RR, eGFR, and the last kidney check to show the doctor alert. "
-            "Ordinary queue assignment is disabled."
-        )
-    elif st.session_state.acute_complaint and not acute_kidney_details_complete:
-        st.warning(
-            "For acute complaints, select eGFR and the last kidney check before "
-            "adding the patient to the queue."
-        )
-
-    st.button(
-        "Add patient to queue",
-        type="primary",
-        key="add_patient_to_queue",
-        disabled=is_emergency
-        or (
-            st.session_state.acute_complaint
-            and not acute_kidney_details_complete
-        ),
-        on_click=add_patient_to_queue,
-        width="stretch",
-    )
-
-
-queue_df = st.session_state.queue.copy()
-active_queue = queue_df[queue_df["status"] != "Shifted to ward"].copy()
-active_queue["triage_level"] = active_queue["risk_score"].apply(classify_risk)
-active_queue.loc[active_queue["emergency"], "triage_level"] = "High"
-active_queue = active_queue.sort_values(
-    ["emergency", "risk_score", "wait_minutes"],
-    ascending=[False, False, True],
-)
-emergency_queue = active_queue[active_queue["emergency"]]
-routine_queue = active_queue[~active_queue["emergency"]]
-patient_options = active_queue["id"].tolist()
-patient_by_id = active_queue.set_index("id")
-patient_label_by_id = {
-    patient_id: (
-        f"{patient_by_id.loc[patient_id, 'patient']} · "
-        f"{patient_by_id.loc[patient_id, 'triage_level']} priority ({patient_id})"
-    )
-    for patient_id in patient_options
-}
-patient_id_by_label = {
-    label: patient_id for patient_id, label in patient_label_by_id.items()
-}
-if "pending_selected_patient_id" in st.session_state:
-    pending_patient_id = st.session_state.pop("pending_selected_patient_id")
-    st.session_state.pop("selected_patient_id", None)
-    if pending_patient_id in patient_options:
-        st.session_state.selected_patient_label = patient_label_by_id[
-            pending_patient_id
-        ]
-
-metric_cols = st.columns(4)
-metric_cols[0].metric("Patients in queue", len(active_queue))
-metric_cols[1].metric(
-    "High triage",
-    int((active_queue["triage_level"] == "High").sum()),
-)
-metric_cols[2].metric(
-    "Median wait",
-    f"{active_queue['wait_minutes'].median():.0f} min"
-    if not active_queue.empty
-    else "—",
-)
-metric_cols[3].metric(
-    "Urgent cases",
-    int(active_queue["status"].isin(["Urgent", "Emergency"]).sum()),
+render_patient_intake(
+    emergency_trigger_reasons,
+    add_patient_to_queue,
+    accept_emergency_patient,
+    bypass_emergency_patient,
 )
 
-notice = st.session_state.pop("patient_notice", None)
-if notice:
-    level, message = notice
-    getattr(st, level)(message)
-
-st.subheader("Emergency priority queue")
-if emergency_queue.empty:
-    st.info("No patients currently have Emergency priority.")
-else:
-    emergency_display = emergency_queue[
-        [
-            "id",
-            "patient",
-            "age",
-            "risk_score",
-            "triage_level",
-            "status",
-            "emergency",
-            "wait_minutes",
-        ]
-    ].copy()
-    emergency_display["emergency"] = emergency_display["emergency"].map(
-        {True: "🚨 EMERGENCY", False: ""}
-    )
-    st.dataframe(emergency_display, width="stretch", hide_index=True)
-
-st.subheader("Routine queue overview")
-display_df = routine_queue[
-    [
-        "id",
-        "patient",
-        "age",
-        "risk_score",
-        "triage_level",
-        "status",
-        "emergency",
-        "wait_minutes",
-    ]
-].copy()
-display_df["emergency"] = display_df["emergency"].map(
-    {True: "🚨 EMERGENCY", False: ""}
+patient_options, patient_by_id, patient_id_by_label = (
+    render_queue_overview(st.session_state.queue.copy(), classify_risk)
 )
-st.dataframe(display_df, width="stretch", hide_index=True)
-
-st.subheader("Doctor's summary")
-if not patient_options:
-    st.info("No active patients in the queue.")
-else:
-    selected_patient_label = st.selectbox(
-        "Select a patient",
-        list(patient_id_by_label),
-        key="selected_patient_label",
-    )
-    selected_patient_id = patient_id_by_label[selected_patient_label]
-    st.session_state.selected_patient_id = selected_patient_id
-    patient = patient_by_id.loc[selected_patient_id]
-    slot_minutes = allocated_slot_minutes(patient["triage_level"])
-
-    with st.container(border=True):
-        st.subheader("10-second clinical summary")
-        if patient["emergency"]:
-            st.error(
-                "**EMERGENCY PRIORITY — follow your clinical emergency protocol.**"
-            )
-            st.markdown(
-                f"**Emergency flags:** {', '.join(patient['emergency_reasons'])}"
-            )
-            emergency_vitals = st.columns(3)
-            emergency_vitals[0].metric(
-                "CBG",
-                "Not recorded"
-                if pd.isna(patient["cbg"])
-                else f"{int(patient['cbg'])} mg/dL",
-            )
-            emergency_vitals[1].metric(
-                "SBP",
-                "Not recorded"
-                if pd.isna(patient["systolic_bp"])
-                else f"{int(patient['systolic_bp'])} mmHg",
-            )
-            emergency_vitals[2].metric(
-                "Respiratory rate",
-                "Not recorded"
-                if pd.isna(patient["respiratory_rate"])
-                else f"{int(patient['respiratory_rate'])} /min",
-            )
-
-        header_cols = st.columns([3, 1, 1, 1])
-        header_cols[0].markdown(f"### {patient['patient']}")
-        header_cols[0].caption(f"Patient ID · {selected_patient_id}")
-        header_cols[1].metric("Age", f"{patient['age']} years")
-        header_cols[2].metric("Triage", patient["triage_level"])
-        header_cols[3].metric("Allocated slot", f"{slot_minutes} min")
-
-        st.markdown("**Complexity drivers**")
-        drivers = patient["drivers"]
-        driver_cols = st.columns(max(1, len(drivers)))
-        for index, driver in enumerate(drivers):
-            driver_cols[index].markdown(
-                f"<div style='background:#f1f5f9;border-left:4px solid #2563eb;"
-                f"border-radius:6px;padding:12px;min-height:58px'>"
-                f"<strong>{index + 1}.</strong> {driver}</div>",
-                unsafe_allow_html=True,
-            )
-
-        st.markdown("**Preventive checks**")
-        preventive_checks = patient["preventive_checks"]
-        if preventive_checks:
-            badges = "".join(
-                f"<span style='display:inline-block;background:#991b1b;color:#fff;"
-                f"font-weight:700;padding:8px 12px;border-radius:999px;margin:0 8px 8px 0'>"
-                f"⚠️ {check} Due</span>"
-                for check in preventive_checks
-            )
-            st.markdown(badges, unsafe_allow_html=True)
-        else:
-            st.success("No overdue annual checks flagged.")
-
-        st.markdown("**Kidney function**")
-        kidney_summary, kidney_overdue = format_kidney_summary(
-            patient["egfr"], patient["months_since_egfr_check"]
-        )
-        if kidney_overdue:
-            st.warning(kidney_summary)
-        else:
-            st.info(kidney_summary)
-
-        st.markdown("**Consultation timer**")
-        consultation_controls(selected_patient_id, slot_minutes)
+render_doctor_overview(
+    patient_options,
+    patient_by_id,
+    patient_id_by_label,
+    archive_patient_after_consultation,
+)
