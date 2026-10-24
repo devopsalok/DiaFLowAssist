@@ -99,8 +99,11 @@ def reset_patient_form() -> None:
     st.session_state.patient_name = ""
     st.session_state.patient_age = 30
     st.session_state.glycemic_control = "Controlled (<7.5%)"
+    st.session_state.hypoglycemia_frequency = "None"
     st.session_state.regimen = "Lifestyle/Oral"
+    st.session_state.medication_adherence = "None"
     st.session_state.preventive_checks = []
+    st.session_state.renal_screening = "NO"
     st.session_state.egfr = None
     st.session_state.months_since_egfr_check = None
     st.session_state.acute_complaint = False
@@ -150,10 +153,13 @@ def create_patient_record(emergency: bool) -> dict:
         ),
         "wait_minutes": int(st.session_state.wait_minutes),
         "glycemic_control": glycemic_control,
+        "hypoglycemia_frequency": st.session_state.hypoglycemia_frequency,
         "regimen": regimen,
+        "medication_adherence": st.session_state.medication_adherence,
         "acute_symptoms": acute_symptoms,
         "drivers": drivers,
         "preventive_checks": preventive_checks,
+        "renal_screening": st.session_state.renal_screening,
         "egfr": st.session_state.egfr,
         "months_since_egfr_check": st.session_state.months_since_egfr_check,
         "emergency": emergency,
@@ -329,7 +335,9 @@ def load_demo_queue() -> pd.DataFrame:
                 "status": "Urgent",
                 "wait_minutes": 15,
                 "glycemic_control": "Uncontrolled (>9% or hypos)",
+                "hypoglycemia_frequency": "Frequent",
                 "regimen": "Insulin",
+                "medication_adherence": "1-2 missed",
                 "acute_symptoms": True,
                 "drivers": [
                     "Uncontrolled HbA1c (>9%) or hypoglycemia",
@@ -338,6 +346,7 @@ def load_demo_queue() -> pd.DataFrame:
                     "Acute complaint or symptoms",
                 ],
                 "preventive_checks": ["uACR", "Foot exam"],
+                "renal_screening": "Overdue",
                 "egfr": 58,
                 "months_since_egfr_check": 14,
                 "emergency": False,
@@ -356,7 +365,9 @@ def load_demo_queue() -> pd.DataFrame:
                 "status": "In triage",
                 "wait_minutes": 9,
                 "glycemic_control": "Suboptimal (7.5-9%)",
+                "hypoglycemia_frequency": "Occasional",
                 "regimen": "Multi-oral",
+                "medication_adherence": "None",
                 "acute_symptoms": False,
                 "drivers": [
                     "Suboptimal glycemic control (HbA1c 7.5-9%)",
@@ -364,6 +375,7 @@ def load_demo_queue() -> pd.DataFrame:
                     "Overdue annual preventive checks",
                 ],
                 "preventive_checks": ["uACR"],
+                "renal_screening": "Yes",
                 "egfr": 92,
                 "months_since_egfr_check": 8,
                 "emergency": False,
@@ -382,10 +394,13 @@ def load_demo_queue() -> pd.DataFrame:
                 "status": "Checked-in",
                 "wait_minutes": 5,
                 "glycemic_control": "Controlled (<7.5%)",
+                "hypoglycemia_frequency": "None",
                 "regimen": "Lifestyle/Oral",
+                "medication_adherence": "None",
                 "acute_symptoms": False,
                 "drivers": ["No elevated-complexity factors reported"],
                 "preventive_checks": [],
+                "renal_screening": "Yes",
                 "egfr": 105,
                 "months_since_egfr_check": 4,
                 "emergency": False,
@@ -404,7 +419,9 @@ def load_demo_queue() -> pd.DataFrame:
                 "status": "Urgent",
                 "wait_minutes": 3,
                 "glycemic_control": "Uncontrolled (>9% or hypos)",
+                "hypoglycemia_frequency": "Frequent",
                 "regimen": "Insulin",
+                "medication_adherence": ">=3 missed",
                 "acute_symptoms": True,
                 "drivers": [
                     "Uncontrolled HbA1c (>9%) or hypoglycemia",
@@ -413,6 +430,7 @@ def load_demo_queue() -> pd.DataFrame:
                     "Acute complaint or symptoms",
                 ],
                 "preventive_checks": ["uACR", "Eye exam"],
+                "renal_screening": "Overdue",
                 "egfr": 58,
                 "months_since_egfr_check": 14,
                 "emergency": False,
@@ -496,6 +514,9 @@ def load_queue_data() -> pd.DataFrame:
         "cbg": None,
         "systolic_bp": None,
         "respiratory_rate": None,
+        "hypoglycemia_frequency": "None",
+        "medication_adherence": "None",
+        "renal_screening": "NO",
     }
     for column, default in defaults.items():
         if column not in queue:
@@ -527,6 +548,9 @@ for column, default in {
     "cbg": None,
     "systolic_bp": None,
     "respiratory_rate": None,
+    "hypoglycemia_frequency": "None",
+    "medication_adherence": "None",
+    "renal_screening": "NO",
 }.items():
     if column not in st.session_state.queue:
         st.session_state.queue[column] = [

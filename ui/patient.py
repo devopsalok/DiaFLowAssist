@@ -68,12 +68,28 @@ def render_patient_intake(
             key="glycemic_control",
         )
         st.selectbox(
+            "Hypoglycemia frequency",
+            ["None", "Occasional", "Frequent"],
+            key="hypoglycemia_frequency",
+        )
+        st.selectbox(
             "Regimen", ["Lifestyle/Oral", "Multi-oral", "Insulin"], key="regimen"
+        )
+        st.selectbox(
+            "Medication adherence",
+            ["None", "1-2 missed", ">=3 missed"],
+            key="medication_adherence",
         )
         st.multiselect(
             "Overdue preventive checks",
             ["uACR", "Foot exam", "Eye exam"],
             key="preventive_checks",
+        )
+        st.selectbox(
+            "Renal screening",
+            ["Yes", "NO", "Overdue"],
+            index=1,
+            key="renal_screening",
         )
         st.selectbox(
             "eGFR (mL/min)",
