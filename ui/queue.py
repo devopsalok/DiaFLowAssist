@@ -58,7 +58,7 @@ def render_queue_overview(
     metric_cols[0].metric("Patients in queue", len(active_queue))
     metric_cols[1].metric(
         "High triage",
-        int((active_queue["triage_level"] == "High").sum()),
+        int((active_queue["Workload_Tier"] == "High").sum()),
     )
     metric_cols[2].metric(
         "Median wait",
