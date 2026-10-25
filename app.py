@@ -25,7 +25,7 @@ def classify_risk(score: float) -> str:
     return "Low"
 
 
-def calculate_risk_score(
+def calculate_workload_index(
     glycemic_control: str,
     regimen: str,
     preventive_checks: list[str],
@@ -124,7 +124,7 @@ def create_patient_record(emergency: bool) -> dict:
     regimen = st.session_state.regimen
     preventive_checks = st.session_state.preventive_checks
     acute_symptoms = st.session_state.acute_complaint
-    risk_score = calculate_risk_score(
+    workload_index = calculate_workload_index(
         glycemic_control, regimen, preventive_checks, acute_symptoms
     )
     reasons = []
@@ -145,11 +145,13 @@ def create_patient_record(emergency: bool) -> dict:
         "id": patient_id,
         "patient": st.session_state.patient_name.strip(),
         "age": int(st.session_state.patient_age),
-        "risk_score": risk_score,
+        "workload_index": workload_index,
         "status": (
             "Emergency"
             if emergency
-            else status_for_triage(classify_risk(risk_score), st.session_state.status)
+            else status_for_triage(
+                classify_risk(workload_index), st.session_state.status
+            )
         ),
         "wait_minutes": int(st.session_state.wait_minutes),
         "glycemic_control": glycemic_control,
@@ -331,7 +333,7 @@ def load_demo_queue() -> pd.DataFrame:
                 "id": "P-101",
                 "patient": "Aisha Khan",
                 "age": 42,
-                "risk_score": 85,
+                "workload_index": 85,
                 "status": "Urgent",
                 "wait_minutes": 15,
                 "glycemic_control": "Uncontrolled (>9% or hypos)",
@@ -361,7 +363,7 @@ def load_demo_queue() -> pd.DataFrame:
                 "id": "P-102",
                 "patient": "Rahul Mehta",
                 "age": 36,
-                "risk_score": 40,
+                "workload_index": 40,
                 "status": "In triage",
                 "wait_minutes": 9,
                 "glycemic_control": "Suboptimal (7.5-9%)",
@@ -390,7 +392,7 @@ def load_demo_queue() -> pd.DataFrame:
                 "id": "P-103",
                 "patient": "Nina Smith",
                 "age": 51,
-                "risk_score": 0,
+                "workload_index": 0,
                 "status": "Checked-in",
                 "wait_minutes": 5,
                 "glycemic_control": "Controlled (<7.5%)",
@@ -415,7 +417,7 @@ def load_demo_queue() -> pd.DataFrame:
                 "id": "P-104",
                 "patient": "Daniel Lee",
                 "age": 67,
-                "risk_score": 85,
+                "workload_index": 85,
                 "status": "Urgent",
                 "wait_minutes": 3,
                 "glycemic_control": "Uncontrolled (>9% or hypos)",

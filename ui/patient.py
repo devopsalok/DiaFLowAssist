@@ -82,7 +82,7 @@ def render_patient_intake(
         )
         st.multiselect(
             "Overdue preventive checks",
-            ["uACR", "Foot exam", "Eye exam"],
+            ["Urine uACR overdue", "Dilated Eye Exam overdue", "Comprehensive Foot Exam overdue"],
             key="preventive_checks",
         )
         st.selectbox(
@@ -152,7 +152,7 @@ def render_patient_intake(
             st.session_state.systolic_bp = None
             st.session_state.respiratory_rate = None
         st.selectbox(
-            "Queue status", ["Waiting", "Checked-in", "In triage"], key="status"
+            "Queue status", ["Waiting", "Checked-in", "In Vitals Check"], key="status"
         )
         st.number_input(
             "Wait time (minutes)", min_value=0, max_value=300, key="wait_minutes"

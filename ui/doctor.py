@@ -5,8 +5,8 @@ import pandas as pd
 import streamlit as st
 
 
-def allocated_slot_minutes(triage_level: str) -> int:
-    return {"Low": 10, "Moderate": 15, "High": 25}[triage_level]
+def allocated_slot_minutes(Workload_tier: str) -> int:
+    return {"Low": 10, "Moderate": 15, "High": 25}[Workload_tier]
 
 
 def format_duration(seconds: float) -> str:
@@ -127,7 +127,7 @@ def render_doctor_overview(
     selected_patient_id = patient_id_by_label[selected_patient_label]
     st.session_state.selected_patient_id = selected_patient_id
     patient = patient_by_id.loc[selected_patient_id]
-    slot_minutes = allocated_slot_minutes(patient["triage_level"])
+    slot_minutes = allocated_slot_minutes(patient["Workload_tier"])
 
     if patient["emergency"]:
         st.error("**EMERGENCY PRIORITY — follow your clinical emergency protocol.**")
@@ -205,7 +205,7 @@ def render_doctor_overview(
     # )
 
     visit_type = "Emergency review" if patient["emergency"] else "Chronic-care follow-up"
-    priority = "PRIORITY REVIEW" if patient["triage_level"] == "High" else "SCHEDULED"
+    priority = "PRIORITY REVIEW" if patient["Workload_tier"] == "High" else "SCHEDULED"
     st.markdown(
         f"<div class='cockpit-banner'><div class='cockpit-banner-group'>"
         f"<div><span class='cockpit-banner-label'>CARE PATHWAY</span>"

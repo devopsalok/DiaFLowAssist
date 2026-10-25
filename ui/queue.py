@@ -6,8 +6,8 @@ QUEUE_DISPLAY_COLUMNS = [
     "id",
     "patient",
     "age",
-    "risk_score",
-    "triage_level",
+    "workload_index",
+    "Workload_tier",
     "status",
     "emergency",
     "wait_minutes",
@@ -26,10 +26,10 @@ def render_queue_overview(
     queue: pd.DataFrame, classify_risk
 ) -> tuple[list[str], pd.DataFrame, dict[str, str]]:
     active_queue = queue[queue["status"] != "Shifted to ward"].copy()
-    active_queue["triage_level"] = active_queue["risk_score"].apply(classify_risk)
-    active_queue.loc[active_queue["emergency"], "triage_level"] = "High"
+    active_queue["Workload_tier"] = active_queue["workload_index"].apply(classify_risk)
+    active_queue.loc[active_queue["emergency"], "Workload_tier"] = "High"
     active_queue = active_queue.sort_values(
-        ["emergency", "risk_score", "wait_minutes"],
+        ["emergency", "workload_index", "wait_minutes"],
         ascending=[False, False, True],
     )
     emergency_queue = active_queue[active_queue["emergency"]]
@@ -39,7 +39,7 @@ def render_queue_overview(
     patient_label_by_id = {
         patient_id: (
             f"{patient_by_id.loc[patient_id, 'patient']} · "
-            f"{patient_by_id.loc[patient_id, 'triage_level']} priority ({patient_id})"
+            f"{patient_by_id.loc[patient_id, 'Workload_tier']} priority ({patient_id})"
         )
         for patient_id in patient_options
     }
@@ -58,7 +58,7 @@ def render_queue_overview(
     metric_cols[0].metric("Patients in queue", len(active_queue))
     metric_cols[1].metric(
         "High triage",
-        int((active_queue["Workload_Tier"] == "High").sum()),
+        int((active_queue["Workload_tier"] == "High").sum()),
     )
     metric_cols[2].metric(
         "Median wait",
